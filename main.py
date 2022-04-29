@@ -39,11 +39,15 @@ tuple[int, int]:
     return count, pos_count
 
 
-def get_results(param, headers, subreddit_check=False, past_results = [], specific_sub = None):
+def get_results(param, headers, subreddit_check=False, past_results=[], specific_sub=None):
     results = []
     subreddits = []
-    res = requests.get("https://oauth.reddit.com/search", param,
-                       headers=headers)
+    if specific_sub is None:
+        res = requests.get("https://oauth.reddit.com/search", param,
+                           headers=headers)
+    else:
+        res = requests.get(f"https://oauth.reddit.com/r/{specific_sub}/search", param,
+                           headers=headers)
     post = res.json()['data']['children']
     after_value = res.json()['data']['after']
     count = len(post)
@@ -62,17 +66,14 @@ def get_results(param, headers, subreddit_check=False, past_results = [], specif
 
 
 def get_oauth():
-    auth = HTTPBasicAuth('vw-fkwBL0vnxGZ5Ofm5VKw', 'ULkWg9VlM0ObIqI1nDdtdVsFsmTG5Q')
-    # auth = HTTPBasicAuth('classified', 'classified')
+    auth = HTTPBasicAuth('classified', 'classified')
 
     # here we pass our login method (password), username, and password
-    data = {'grant_type': 'password',
-            'username': 'checking_sentiment',
-            'password': '8S(pM;,E]crQQ{9:'}
 
-    # data =  {'grant_type': 'password',
-    #         'username': 'classified',
-    #         'password': 'classified'}
+
+    data =  {'grant_type': 'password',
+            'username': 'classified',
+            'password': 'classified'}
 
     # setup our header info, which gives reddit a brief description of our app
     headers = {'User-Agent': 'sentiment_analysis_bot'}
@@ -101,27 +102,39 @@ def main():
     sia = SentimentIntensityAnalyzer()
     headers = get_oauth()
     search_term = input("Please enter search term: ")
-    parameters = {"restrict_sr": False, "limit": 100, "sort": "top", "q": search_term}
+    sort_type = "top"
+    time = "month"
+    parameters = {"restrict_sr": False, "limit": 100, "sort": sort_type, "q": search_term, "t": time}
     results = []
     subreddits = []
     subreddit_check = True
     listing_counter = 0
-    for i in range(0,2):
+    for i in range(0,3):
         if i == 0:
-            results_add, subreddits_add, after, count = get_results(parameters, headers, subreddit_check)
+            results_add, subreddits_add, after, count = get_results(parameters, headers, subreddit_check, results)
         else:
             listing_counter += count
-            parameters = {"restrict_sr": False, "limit": 100, "sort": "top", "q": search_term, "after": after, "count" : listing_counter}
-            results_add, subreddits_add, after, count = get_results(parameters, headers, subreddit_check)
+            parameters = {"restrict_sr": False, "limit": 100, "sort": sort_type, "q": search_term, "after": after,
+                          "count": listing_counter, "t": time}
+            results_add, subreddits_add, after, count = get_results(parameters, headers, subreddit_check, results)
         results += results_add
         subreddits += subreddits_add
 
+    # Adding common subreddits posts
+    common_subreddits = Counter(subreddits).most_common(10)
+    number_of_subs = 3
+    for sub in common_subreddits[0:number_of_subs]:
+        sub_name = sub[0]
+        parameters = {"restrict_sr": True, "limit": 100, "sort": sort_type, "q": search_term, "t": time}
+        results_add, subreddits_add, after, count = get_results(parameters, headers, subreddit_check, results, specific_sub=sub_name)
+        results += results_add
+
     for result in results:
-        total_counter, pos_counter = classify_text(result, classifier, top_100_neg, top_100_pos, sia, total_counter, pos_counter)
+        total_counter, pos_counter = classify_text(result, classifier, top_100_neg, top_100_pos, sia,
+                                                   total_counter, pos_counter)
 
     print(f"Positive score: {round(100*pos_counter/total_counter,2)}%")
 
-    common_subreddits = Counter(subreddits).most_common(10)
     print(f"Most common subreddits (subreddit, number of mentions):")
     print(common_subreddits)
 
